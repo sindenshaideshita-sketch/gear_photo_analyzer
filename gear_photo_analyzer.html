@@ -1,0 +1,1545 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>歯車写真解析ツール | Gear Photo Analyzer</title>
+<style>
+  :root{
+    --bg:#12161a;
+    --panel:#1a2026;
+    --panel-alt:#20272e;
+    --border:#313b44;
+    --border-soft:#262e35;
+    --text:#e7edf1;
+    --text-dim:#8fa0ac;
+    --text-faint:#5c6b76;
+    --accent:#4fd1c5;
+    --accent-dim:#2f7a72;
+    --accent-soft:rgba(79,209,197,0.12);
+    --warn:#e0a458;
+    --warn-soft:rgba(224,164,88,0.12);
+    --danger:#e08a7d;
+    --danger-soft:rgba(224,138,125,0.12);
+    --ok:#7dc98f;
+    --mono: ui-monospace, "SFMono-Regular", "Cascadia Mono", "JetBrains Mono", Consolas, monospace;
+    --sans: -apple-system, "Segoe UI", "Hiragino Sans", "Noto Sans JP", sans-serif;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      linear-gradient(var(--bg), var(--bg)),
+      repeating-linear-gradient(0deg, rgba(79,209,197,0.035) 0px, rgba(79,209,197,0.035) 1px, transparent 1px, transparent 28px),
+      repeating-linear-gradient(90deg, rgba(79,209,197,0.035) 0px, rgba(79,209,197,0.035) 1px, transparent 1px, transparent 28px);
+    color:var(--text);
+    font-family:var(--sans);
+    min-height:100vh;
+    padding:28px 20px 60px;
+  }
+  .wrap{max-width:1280px;margin:0 auto;}
+
+  header{margin-bottom:22px;border-bottom:1px solid var(--border-soft);padding-bottom:18px;}
+  .eyebrow{
+    font-family:var(--mono);font-size:11px;letter-spacing:0.18em;color:var(--accent);
+    text-transform:uppercase;margin-bottom:8px;
+  }
+  h1{font-size:22px;font-weight:600;margin:0 0 6px;letter-spacing:0.01em;}
+  .sub{color:var(--text-dim);font-size:13.5px;line-height:1.6;max-width:760px;}
+
+  .layout{display:grid;grid-template-columns:340px 1fr;gap:20px;align-items:start;}
+  @media (max-width:920px){.layout{grid-template-columns:1fr;}}
+
+  /* mobile-friendly touch targets and spacing */
+  @media (max-width:640px){
+    body{padding:14px 10px 40px;}
+    h1{font-size:19px;}
+    .sub{font-size:12.5px;}
+    .panel{padding:14px;}
+    button{padding:13px 14px;font-size:14px;} /* larger tap target */
+    .stepbtn{width:42px;height:42px;font-size:19px;}
+    input[type=number]{padding:11px 10px;font-size:15px;} /* avoid iOS zoom-on-focus (>=16px safer, keep close) */
+    .zval, #zVal{font-size:22px;}
+    .toolbar{flex-direction:column;align-items:flex-start;}
+    table th, table td{padding:8px 6px;font-size:12px;}
+  }
+
+  .camera-holder{
+    position:relative;width:100%;border-radius:8px;overflow:hidden;background:#000;
+    aspect-ratio:4/3;
+  }
+  .camera-holder video, .camera-holder canvas{
+    position:absolute;top:0;left:0;width:100%;height:100%;object-fit:cover;
+  }
+  .camera-status{
+    font-family:var(--mono);font-size:12px;color:var(--accent);margin-top:8px;text-align:center;
+    min-height:16px;
+  }
+  .camera-status.warn{color:var(--warn);}
+  .camera-status.ok{color:var(--ok);}
+  .camera-btnrow{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:10px;}
+
+
+  .panel{
+    background:var(--panel);border:1px solid var(--border);border-radius:10px;
+    padding:18px;
+  }
+  .panel + .panel{margin-top:16px;}
+
+  .step-label{
+    display:flex;align-items:center;gap:8px;
+    font-family:var(--mono);font-size:11px;color:var(--text-faint);
+    text-transform:uppercase;letter-spacing:0.1em;margin-bottom:10px;
+  }
+  .step-num{
+    width:18px;height:18px;border-radius:4px;background:var(--accent-soft);color:var(--accent);
+    display:flex;align-items:center;justify-content:center;font-size:10.5px;font-weight:700;
+    flex-shrink:0;
+  }
+  .step-num.done{background:var(--accent);color:#0c1114;}
+
+  .dropzone{
+    border:1.5px dashed var(--border);border-radius:8px;padding:22px 14px;text-align:center;
+    cursor:pointer;transition:border-color .15s, background .15s;color:var(--text-dim);font-size:13px;
+  }
+  .dropzone:hover, .dropzone.drag{border-color:var(--accent);background:var(--accent-soft);color:var(--text);}
+  .dropzone input{display:none;}
+  .dropzone .icon{font-size:22px;display:block;margin-bottom:6px;opacity:0.7;}
+
+  label.field{display:block;font-size:12px;color:var(--text-dim);margin:12px 0 5px;}
+  label.field .unit{color:var(--text-faint);font-weight:400;}
+  input[type=number], select{
+    width:100%;background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;
+    color:var(--text);font-family:var(--mono);font-size:14px;padding:8px 10px;
+  }
+  input[type=number]:focus, select:focus{outline:none;border-color:var(--accent);}
+  input[type=range]{width:100%;accent-color:var(--accent);}
+  .rangerow{display:flex;justify-content:space-between;align-items:center;font-size:11px;color:var(--text-faint);font-family:var(--mono);margin-top:2px;}
+
+  .checkrow{display:flex;align-items:center;gap:8px;font-size:12.5px;color:var(--text-dim);margin-top:10px;}
+  .checkrow input{accent-color:var(--accent);}
+
+  button{
+    font-family:var(--sans);border:none;border-radius:6px;padding:10px 14px;font-size:13px;
+    font-weight:600;cursor:pointer;transition:opacity .15s, transform .1s;
+  }
+  button:active{transform:scale(0.98);}
+  button:disabled{opacity:0.35;cursor:not-allowed;}
+  .btn-primary{background:var(--accent);color:#0c1114;width:100%;margin-top:14px;}
+  .btn-primary:hover:not(:disabled){opacity:0.88;}
+  .btn-ghost{background:var(--panel-alt);color:var(--text-dim);border:1px solid var(--border);}
+  .btn-ghost:hover:not(:disabled){color:var(--text);border-color:var(--accent-dim);}
+
+  .zrow{display:flex;align-items:center;gap:10px;margin-top:10px;}
+  .zbox{
+    flex:1;background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;
+    padding:10px 12px;text-align:center;
+  }
+  .zbox .zval{font-family:var(--mono);font-size:26px;font-weight:700;color:var(--accent);line-height:1;}
+  .zbox .zlabel{font-size:10.5px;color:var(--text-faint);margin-top:4px;letter-spacing:0.05em;}
+  .stepbtn{
+    width:34px;height:34px;border-radius:6px;background:var(--panel-alt);border:1px solid var(--border);
+    color:var(--text);font-size:16px;display:flex;align-items:center;justify-content:center;cursor:pointer;
+  }
+  .stepbtn:hover{border-color:var(--accent);color:var(--accent);}
+
+  .hint{font-size:11.5px;color:var(--text-faint);line-height:1.5;margin-top:8px;}
+  .hint.warn{color:var(--warn);}
+
+  /* canvas area */
+  .canvas-card{background:var(--panel);border:1px solid var(--border);border-radius:10px;padding:16px;}
+  .canvas-holder{
+    position:relative;width:100%;border-radius:8px;background:
+      repeating-linear-gradient(45deg,#0e1216,#0e1216 10px,#12171b 10px,#12171b 20px);
+    display:flex;align-items:center;justify-content:center;min-height:320px;
+  }
+  .canvas-holder canvas{position:absolute;top:0;left:0;width:100%;height:100%;image-rendering:pixelated;}
+  .canvas-holder .placeholder{color:var(--text-faint);font-size:13px;text-align:center;padding:40px;}
+  .canvas-inner{position:relative;width:100%;}
+
+  .toolbar{display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;flex-wrap:wrap;gap:8px;}
+  .toolbar .msg{font-size:12.5px;color:var(--accent);font-family:var(--mono);}
+  .legend{display:flex;gap:14px;flex-wrap:wrap;font-size:11px;color:var(--text-dim);margin-top:10px;}
+  .legend span{display:inline-flex;align-items:center;gap:5px;}
+  .dot{width:8px;height:8px;border-radius:50%;display:inline-block;}
+
+  /* profile chart */
+  .chart-card{margin-top:16px;}
+  .chart-title{font-family:var(--mono);font-size:11px;color:var(--text-faint);text-transform:uppercase;letter-spacing:0.08em;margin-bottom:8px;}
+  canvas#profileChart{width:100%;height:120px;display:block;}
+
+  /* results table */
+  .results{margin-top:16px;}
+  table{width:100%;border-collapse:collapse;font-size:13px;}
+  table th, table td{padding:9px 10px;border-bottom:1px solid var(--border-soft);text-align:left;}
+  table th{color:var(--text-faint);font-weight:500;font-size:11.5px;text-transform:uppercase;letter-spacing:0.04em;}
+  table td.val{font-family:var(--mono);text-align:right;color:var(--text);}
+  table td.tag{font-family:var(--mono);text-align:right;font-size:11px;}
+  tr.section td{padding-top:16px;color:var(--accent);font-family:var(--mono);font-size:11px;text-transform:uppercase;letter-spacing:0.08em;border-bottom:1px solid var(--border);}
+  .badge{display:inline-block;padding:2px 8px;border-radius:20px;font-size:10.5px;font-family:var(--mono);}
+  .badge.ok{background:rgba(125,201,143,0.12);color:var(--ok);}
+  .badge.warn{background:var(--warn-soft);color:var(--warn);}
+  .badge.danger{background:var(--danger-soft);color:var(--danger);}
+
+  .flagbox{margin-top:14px;padding:12px 14px;border-radius:8px;font-size:12.5px;line-height:1.6;border:1px solid;}
+  .flagbox.ok{border-color:rgba(125,201,143,0.3);background:rgba(125,201,143,0.06);color:var(--ok);}
+  .flagbox.warn{border-color:rgba(224,164,88,0.35);background:var(--warn-soft);color:var(--warn);}
+  .flagbox.danger{border-color:rgba(224,138,125,0.35);background:var(--danger-soft);color:var(--danger);}
+
+  .disclaimer{
+    margin-top:20px;font-size:11.5px;color:var(--text-faint);line-height:1.7;
+    border-top:1px solid var(--border-soft);padding-top:14px;
+  }
+  .disclaimer b{color:var(--text-dim);}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="eyebrow">Da入力式 &middot; 歯数・モジュール推定プロトタイプ</div>
+    <h1>歯車写真解析ツール</h1>
+    <div class="sub">
+      歯車の写真から歯数を自動検出し、実測した外径(Da)を基準スケールとしてモジュール候補・ピッチ円直径を算出します。
+      歯数zと外径Daは直接の実測値、モジュールは転位係数xとの連立方程式が解けないため単一の正解ではなく候補として提示します。
+      歯底円・圧力角・基礎円は画像検出や仮定に頼るため「参考値・検算用」です。
+      写真のコントラスト・写り込む大きさ・ピントの状態によって検出精度は大きく変わるため、結果は必ず目視で確認してください。
+      はすば歯車は正面(軸方向)から撮影すれば外径・歯数の検出自体は可能ですが、歯すじが斜めのため奥の歯や背景が透けて誤検出しやすい点に注意してください(すぐ背後に無地の紙を当てると改善します)。
+    </div>
+  </header>
+
+  <div class="layout">
+
+    <!-- LEFT: controls -->
+    <div class="controls">
+
+      <div class="panel" id="panelUpload">
+        <div class="step-label"><span class="step-num" id="sn1">1</span> 写真を読み込む</div>
+
+        <button class="btn-primary" id="cameraBtn" style="margin-top:0;">&#128247; カメラでリアルタイム確認しながら撮る</button>
+
+        <div id="cameraPanel" style="display:none;margin-top:12px;">
+          <div class="camera-holder" id="cameraHolder">
+            <video id="cameraVideo" autoplay playsinline muted></video>
+            <canvas id="cameraOverlay"></canvas>
+          </div>
+          <div class="camera-status" id="cameraStatus">カメラを起動しています…</div>
+          <div class="checkrow">
+            <input type="checkbox" id="cameraMaskToggle" checked>
+            <label for="cameraMaskToggle">認識プレビューを表示(緑=歯車として認識される領域)</label>
+          </div>
+          <div class="camera-btnrow">
+            <button class="btn-primary" id="captureBtn" style="margin-top:0;">この状態で撮影</button>
+            <button class="btn-ghost" id="cameraCancelBtn" style="margin-top:0;">閉じる</button>
+          </div>
+        </div>
+
+        <div class="hint" style="margin-top:12px;">カメラだと、影やコントラスト不足をその場で確認しながら撮り直せます。既存の写真を使う場合は下からアップロードしてください。</div>
+
+        <div class="dropzone" id="dropzone" style="margin-top:10px;">
+          <span class="icon">&#9670;</span>
+          写真をドラッグ&amp;ドロップ<br>またはタップして選択
+          <input type="file" id="fileInput" accept="image/*" capture="environment">
+        </div>
+        <div class="hint">歯車を正面から、背景とコントラストの出る場所(白紙・カッティングマット等)で撮影してください。
+          はすば歯車など歯すじが斜めの場合、歯車のすぐ背後に(隙間を空けず)無地の紙等を当てて、奥の歯や背景が透けて見えないようにすると誤検出が減ります。
+          歯が細かい歯車は、1枚の歯が写真上で数ピクセルしかない場合、これ以上の解析処理では改善できません(光学的な解像度の限界)。歯車全体ではなく歯先付近を大きく写す(寄って撮る/クロップする)と改善します。</div>
+      </div>
+
+      <div class="panel" id="panelThresh" style="display:none;">
+        <div class="step-label"><span class="step-num" id="sn2">2</span> 輪郭抽出のしきい値調整</div>
+        <label class="field">二値化しきい値 <span class="unit">(0-255)</span></label>
+        <input type="range" id="threshSlider" min="0" max="255" value="128">
+        <div class="rangerow"><span>暗</span><span id="threshVal">128</span><span>明</span></div>
+        <div class="checkrow">
+          <input type="checkbox" id="invertCheck">
+          <label for="invertCheck">背景の方が明るい場合はOFF、歯車の方が明るい場合はON(反転)</label>
+        </div>
+        <div class="checkrow">
+          <input type="checkbox" id="maskPreview" checked>
+          <label for="maskPreview">二値化マスクをプレビュー表示</label>
+        </div>
+        <div class="hint">歯数検出は各方向ごとに自動適応するしきい値を使って行うため、このスライダーは確認用のプレビュー表示にのみ影響します。反転設定(ON/OFF)だけは検出にも使われます。</div>
+      </div>
+
+      <div class="panel" id="panelCenter" style="display:none;">
+        <div class="step-label"><span class="step-num" id="sn3">3</span> 中心の検出</div>
+        <div class="hint" id="centerHint">画像上で歯車のおおよその中心をクリックしてください。</div>
+        <div class="checkrow">
+          <input type="checkbox" id="segPreview">
+          <label for="segPreview">背景除去プレビューを表示(緑=歯車として認識した領域)</label>
+        </div>
+        <button class="btn-primary" id="detectBtn" disabled>歯数を自動検出</button>
+      </div>
+
+      <div class="panel" id="panelResult" style="display:none;">
+        <div class="step-label"><span class="step-num" id="sn4">4</span> 検出結果を確認・補正</div>
+        <div class="zrow">
+          <div class="stepbtn" id="zMinus">&minus;</div>
+          <div class="zbox">
+            <input type="number" id="zVal" min="3" step="1" style="width:100%;background:transparent;border:none;text-align:center;font-family:var(--mono);font-size:26px;font-weight:700;color:var(--accent);padding:0;">
+            <div class="zlabel">検出歯数 z (数値を直接編集可)</div>
+          </div>
+          <div class="stepbtn" id="zPlus">&plus;</div>
+        </div>
+        <div class="hint" id="detectHint"></div>
+        <div class="hint">写真を目視して数えた歯数と異なる場合は、上の数値欄に直接入力して修正してください。</div>
+      </div>
+
+      <div class="panel" id="panelInput" style="display:none;border-color:var(--accent-dim);">
+        <div class="step-label"><span class="step-num" id="sn5">5</span> 実測値を入力</div>
+
+        <div id="daFieldsEven">
+          <label class="field">外径(歯先円直径) Da <span class="unit">mm・マイクロメータ実測値</span></label>
+          <input type="number" id="daInput" step="0.01" placeholder="例: 42.50">
+        </div>
+
+        <div id="daFieldsOdd" style="display:none;">
+          <div class="hint" style="margin-top:0;color:var(--warn);">
+            歯数が奇数のため、マイクロメータで挟むと対向1枚+隣接2枚の計3点で接触し、Daより少し小さい値が読み取られます。その読み取り値(3点測定値M)をそのまま入力してください — 実際の外径は歯数から自動的に換算します。
+          </div>
+          <label class="field">3点測定値 M <span class="unit">mm・マイクロメータ読み取り値そのまま</span></label>
+          <input type="number" id="daOddM" step="0.01" placeholder="例: 42.10">
+          <div class="hint">換算式: Da = 2M / (1 + cos(&pi;/z)) &nbsp;→&nbsp; 実効外径: <span id="daOddCalc" style="color:var(--accent);font-family:var(--mono);">--</span> mm</div>
+        </div>
+
+        <label class="field">圧力角 &alpha; <span class="unit">deg・不明なら20&deg;のまま</span></label>
+        <input type="number" id="alphaInput" value="20" step="0.5">
+
+        <div class="hint" style="margin-top:14px;border-top:1px solid var(--border-soft);padding-top:10px;">
+          <b>任意:</b> またぎ歯厚を実測できる場合は入力すると、モジュールmと転位係数xを候補からの推測ではなく連立方程式で直接算出できます。
+        </div>
+        <label class="field">推奨またぎ歯数 k <span class="unit">(z, &alpha;から自動計算)</span></label>
+        <div style="font-family:var(--mono);font-size:20px;color:var(--accent);background:var(--panel-alt);border:1px solid var(--border);border-radius:6px;padding:8px 10px;">
+          k = <span id="spanK">--</span> 枚
+        </div>
+        <label class="field">またぎ歯厚 実測値 W <span class="unit">mm・任意/またぎ歯厚マイクロメータ実測値</span></label>
+        <input type="number" id="spanWInput" step="0.001" placeholder="未測定なら空欄のままでOK">
+
+        <button class="btn-primary" id="calcBtn" disabled>諸元を計算</button>
+      </div>
+
+    </div>
+
+    <!-- RIGHT: canvas + results -->
+    <div class="stage">
+
+      <div class="canvas-card">
+        <div class="toolbar">
+          <div class="chart-title" style="margin:0;">画像 &amp; 検出オーバーレイ</div>
+          <div class="msg" id="toolbarMsg"></div>
+        </div>
+        <div class="canvas-holder" id="canvasHolder">
+          <div class="placeholder" id="placeholder">写真を読み込むとここに表示されます</div>
+          <div class="canvas-inner" id="canvasInner" style="display:none;">
+            <canvas id="baseCanvas"></canvas>
+            <canvas id="overlayCanvas"></canvas>
+          </div>
+        </div>
+        <div class="legend">
+          <span><span class="dot" style="background:#f2c14e;"></span>検出輪郭(全周プロファイル)</span>
+          <span><span class="dot" style="background:#e0685f;"></span>歯先ピーク</span>
+          <span><span class="dot" style="background:#5aa9e6;"></span>歯底バレー</span>
+          <span><span class="dot" style="background:#4fd1c5;"></span>中心点</span>
+        </div>
+
+        <div class="chart-card">
+          <div class="chart-title">半径プロファイル r(&theta;) — 山:歯先 / 谷:歯底</div>
+          <canvas id="profileChart"></canvas>
+        </div>
+      </div>
+
+      <div class="panel results" id="resultsPanel" style="display:none;">
+        <div class="step-label" style="margin-bottom:2px;"><span class="step-num done">&#10003;</span> 諸元推定結果</div>
+        <table>
+          <tbody id="resultsBody"></tbody>
+        </table>
+        <div id="flagArea"></div>
+      </div>
+
+      <div class="disclaimer">
+        <b>実測値:</b> 歯数zは写真から自動検出(目視で必ず確認してください)、外径Daは手入力(実測)です。写真のコントラスト・写り込む大きさ・ピントの状態によって歯数の検出結果は変わるため、断定的な精度は表記していません。<br>
+        <b>モジュールについて:</b> Da = m&times;(z+2+2x) の関係上、写真からはmとx(転位係数)を同時に特定できません。表示するm0はx=0仮定の参考値であり、
+        転位歯車が多い実務では実際のモジュールと乖離する可能性があります。候補表でJIS標準モジュールごとの整合するxを確認し、選定・カタログ知見と合わせて判断してください。<br>
+        <b>参考値:</b> 歯底円は画像検出による目安の値です。圧力角・はすば角・転位量は写真から実測できないため、圧力角は既定20&deg;の仮定値を使用しています。<br>
+        <b>はすば歯車:</b> 正面撮影でも歯すじが斜めなため奥の歯や背景が透けて見え、誤検出の原因になります。すぐ背後に無地の紙等を当てて奥を隠すと改善します。<br>
+        <b>写真の限界:</b> 歯車が画面の一部にしか写っていない、ピントが甘い、影や反射で背景と歯車の区別がつきにくい、といった写真は検出精度が大きく落ちます。歯先付近に寄って撮る・無地の背景で均一に照明する・ピントを合わせる、が効果的です。<br>
+        正確なモジュール・転位量を確定するには、またぎ歯厚測定(オーバーピン法)や現物のCMM測定が必要です。最終的な諸元は必ず現物測定・図面と照合してください。
+      </div>
+
+    </div>
+  </div>
+</div>
+
+<script>
+(function(){
+  "use strict";
+
+  // ---------- state ----------
+  let img = null;
+  let baseCanvas = document.getElementById('baseCanvas');
+  let overlayCanvas = document.getElementById('overlayCanvas');
+  let bctx = baseCanvas.getContext('2d', {willReadFrequently:true});
+  let octx = overlayCanvas.getContext('2d');
+  let grayData = null; // Uint8ClampedArray grayscale, same size as canvas
+  let segMask = null; // Uint8Array — largest connected foreground component, same size as canvas
+  let cw=0, ch=0;
+  let center = null; // {x,y} in canvas px
+  let lastProfile = null; // {rProfile, angles, peaks, valleys, midLevel, rMin, rMax}
+  let zOverrideDelta = 0; // manual +/- applied on top of detected count
+
+  const els = {
+    dropzone: document.getElementById('dropzone'),
+    fileInput: document.getElementById('fileInput'),
+    cameraBtn: document.getElementById('cameraBtn'),
+    cameraPanel: document.getElementById('cameraPanel'),
+    cameraHolder: document.getElementById('cameraHolder'),
+    cameraVideo: document.getElementById('cameraVideo'),
+    cameraOverlay: document.getElementById('cameraOverlay'),
+    cameraStatus: document.getElementById('cameraStatus'),
+    cameraMaskToggle: document.getElementById('cameraMaskToggle'),
+    captureBtn: document.getElementById('captureBtn'),
+    cameraCancelBtn: document.getElementById('cameraCancelBtn'),
+    panelThresh: document.getElementById('panelThresh'),
+    panelCenter: document.getElementById('panelCenter'),
+    panelResult: document.getElementById('panelResult'),
+    panelInput: document.getElementById('panelInput'),
+    threshSlider: document.getElementById('threshSlider'),
+    threshVal: document.getElementById('threshVal'),
+    invertCheck: document.getElementById('invertCheck'),
+    maskPreview: document.getElementById('maskPreview'),
+    detectBtn: document.getElementById('detectBtn'),
+    calcBtn: document.getElementById('calcBtn'),
+    zVal: document.getElementById('zVal'),
+    zMinus: document.getElementById('zMinus'),
+    zPlus: document.getElementById('zPlus'),
+    detectHint: document.getElementById('detectHint'),
+    daInput: document.getElementById('daInput'),
+    daFieldsEven: document.getElementById('daFieldsEven'),
+    daFieldsOdd: document.getElementById('daFieldsOdd'),
+    daOddM: document.getElementById('daOddM'),
+    daOddCalc: document.getElementById('daOddCalc'),
+    alphaInput: document.getElementById('alphaInput'),
+    spanK: document.getElementById('spanK'),
+    spanWInput: document.getElementById('spanWInput'),
+    resultsPanel: document.getElementById('resultsPanel'),
+    resultsBody: document.getElementById('resultsBody'),
+    flagArea: document.getElementById('flagArea'),
+    placeholder: document.getElementById('placeholder'),
+    canvasInner: document.getElementById('canvasInner'),
+    toolbarMsg: document.getElementById('toolbarMsg'),
+    centerHint: document.getElementById('centerHint'),
+    segPreview: document.getElementById('segPreview'),
+    profileChart: document.getElementById('profileChart'),
+  };
+
+  const JIS_MODULES = [0.1,0.15,0.2,0.25,0.3,0.4,0.5,0.6,0.75,0.8,1,1.25,1.5,1.75,2,2.25,2.5,2.75,3,3.5,4,4.5,5,5.5,6,6.5,7,8,9,10,11,12,13,14,15,16,18,20,22,25];
+
+  function setStep(n){
+    for(let i=1;i<=5;i++){
+      const el = document.getElementById('sn'+i);
+      if(!el) continue;
+      el.classList.toggle('done', i<n);
+    }
+  }
+
+  // ---------- file loading ----------
+  els.dropzone.addEventListener('click', ()=>els.fileInput.click());
+  ['dragover','dragenter'].forEach(ev=>els.dropzone.addEventListener(ev, e=>{e.preventDefault();els.dropzone.classList.add('drag');}));
+  ['dragleave','drop'].forEach(ev=>els.dropzone.addEventListener(ev, e=>{e.preventDefault();els.dropzone.classList.remove('drag');}));
+  els.dropzone.addEventListener('drop', e=>{
+    const f = e.dataTransfer.files[0];
+    if(f) loadFile(f);
+  });
+  els.fileInput.addEventListener('change', e=>{
+    if(e.target.files[0]) loadFile(e.target.files[0]);
+  });
+
+  function loadFile(file){
+    const reader = new FileReader();
+    reader.onload = function(e){
+      const image = new Image();
+      image.onload = function(){
+        img = image;
+        setupCanvas();
+      };
+      image.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+  }
+
+  // ---------- live camera: shoot with real-time shadow/contrast feedback ----------
+  let cameraStream = null;
+  let cameraLoopId = null;
+
+  els.cameraBtn.addEventListener('click', startCamera);
+  els.cameraCancelBtn.addEventListener('click', stopCamera);
+  els.cameraMaskToggle.addEventListener('change', ()=>{}); // loop just reads the checkbox live
+
+  async function startCamera(){
+    els.cameraPanel.style.display = 'block';
+    els.cameraStatus.className = 'camera-status';
+    els.cameraStatus.textContent = 'カメラを起動しています…';
+    try{
+      cameraStream = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: { ideal: 'environment' }, width:{ideal:1280}, height:{ideal:960} },
+        audio: false
+      });
+      els.cameraVideo.srcObject = cameraStream;
+      await els.cameraVideo.play();
+      startCameraLoop();
+    }catch(err){
+      console.error(err);
+      els.cameraStatus.className = 'camera-status warn';
+      els.cameraStatus.textContent = 'カメラを起動できませんでした(権限が許可されているか確認してください)。下のアップロードから写真を選んでください。';
+    }
+  }
+
+  function stopCamera(){
+    if(cameraLoopId) cancelAnimationFrame(cameraLoopId);
+    cameraLoopId = null;
+    if(cameraStream){ cameraStream.getTracks().forEach(t=>t.stop()); cameraStream = null; }
+    els.cameraPanel.style.display = 'none';
+  }
+
+  // Lightweight live analysis: downsample the current video frame, estimate
+  // background from the border, flag high variance there (a sign of uneven
+  // lighting/shadow) and optionally paint a live foreground/background
+  // preview so the person can see problems before pressing the shutter.
+  const camAnalysisCanvas = document.createElement('canvas');
+  camAnalysisCanvas.width = 200; camAnalysisCanvas.height = 150;
+  const camActx = camAnalysisCanvas.getContext('2d', {willReadFrequently:true});
+
+  function startCameraLoop(){
+    let lastAnalysis = 0;
+    function loop(ts){
+      if(!cameraStream){ return; }
+      if(!lastAnalysis || ts-lastAnalysis > 250){
+        lastAnalysis = ts;
+        analyzeCameraFrame();
+      }
+      cameraLoopId = requestAnimationFrame(loop);
+    }
+    cameraLoopId = requestAnimationFrame(loop);
+  }
+
+  function analyzeCameraFrame(){
+    const video = els.cameraVideo;
+    if(!video.videoWidth) return;
+    const aw = camAnalysisCanvas.width, ah = camAnalysisCanvas.height;
+    camActx.drawImage(video, 0, 0, aw, ah);
+    const data = camActx.getImageData(0,0,aw,ah).data;
+
+    // background estimate from a thin border, same idea as the main pipeline
+    const border = 6;
+    const borderVals = [];
+    const gray = new Float32Array(aw*ah);
+    for(let y=0;y<ah;y++){
+      for(let x=0;x<aw;x++){
+        const i=(y*aw+x)*4;
+        const g = 0.299*data[i]+0.587*data[i+1]+0.114*data[i+2];
+        gray[y*aw+x]=g;
+        if(x<border||x>=aw-border||y<border||y>=ah-border) borderVals.push(g);
+      }
+    }
+    const mean = borderVals.reduce((a,b)=>a+b,0)/borderVals.length;
+    const variance = borderVals.reduce((a,b)=>a+(b-mean)*(b-mean),0)/borderVals.length;
+    const std = Math.sqrt(variance);
+
+    // update status text
+    if(std > 22){
+      els.cameraStatus.className = 'camera-status warn';
+      els.cameraStatus.textContent = '⚠ 背景の明るさにムラがあります(影・反射に注意) — 標準偏差 '+std.toFixed(1);
+    } else {
+      els.cameraStatus.className = 'camera-status ok';
+      els.cameraStatus.textContent = '✓ 背景は比較的均一です — 標準偏差 '+std.toFixed(1);
+    }
+
+    // optional live mask overlay
+    const overlay = els.cameraOverlay;
+    const vw = video.videoWidth, vh = video.videoHeight;
+    if(overlay.width !== vw) overlay.width = vw;
+    if(overlay.height !== vh) overlay.height = vh;
+    const octx2 = overlay.getContext('2d');
+    octx2.clearRect(0,0,overlay.width,overlay.height);
+    if(els.cameraMaskToggle.checked){
+      // Otsu threshold on distance-from-background-color (reuse small helper)
+      const bgGray = mean;
+      const distArr = new Float32Array(aw*ah);
+      let maxDist=0;
+      for(let i=0;i<aw*ah;i++){
+        const d = Math.abs(gray[i]-bgGray);
+        distArr[i]=d; if(d>maxDist) maxDist=d;
+      }
+      if(maxDist>5){
+        const t = otsuThreshold(distArr, maxDist);
+        const scaleX = overlay.width/aw, scaleY = overlay.height/ah;
+        octx2.fillStyle = 'rgba(90,220,110,0.45)';
+        for(let y=0;y<ah;y++){
+          for(let x=0;x<aw;x++){
+            if(distArr[y*aw+x] > t){
+              octx2.fillRect(x*scaleX, y*scaleY, scaleX+1, scaleY+1);
+            }
+          }
+        }
+      }
+    }
+  }
+
+  els.captureBtn.addEventListener('click', function(){
+    const video = els.cameraVideo;
+    if(!video.videoWidth) return;
+    const cap = document.createElement('canvas');
+    cap.width = video.videoWidth; cap.height = video.videoHeight;
+    cap.getContext('2d').drawImage(video, 0, 0);
+    const image = new Image();
+    image.onload = function(){
+      img = image;
+      stopCamera();
+      setupCanvas();
+    };
+    image.src = cap.toDataURL('image/jpeg', 0.92);
+  });
+
+  // ---------- background removal / auto-center ----------
+  // Estimate the background color from a thin border strip (photos are shot
+  // with the gear on a plain background that reaches the frame edges), using
+  // the median per channel so a stray shadow or reflection near the edge
+  // doesn't skew the estimate the way a mean would.
+  function estimateBackgroundColor(data, cw, ch){
+    const border = Math.max(3, Math.round(Math.min(cw,ch)*0.015));
+    const rs=[], gs=[], bs=[];
+    for(let y=0;y<ch;y++){
+      for(let x=0;x<cw;x++){
+        if(x>=border && x<cw-border && y>=border && y<ch-border) continue;
+        const i = (y*cw+x)*4;
+        rs.push(data[i]); gs.push(data[i+1]); bs.push(data[i+2]);
+      }
+    }
+    function median(arr){ arr.sort((a,b)=>a-b); return arr[Math.floor(arr.length/2)]; }
+    return {r: median(rs), g: median(gs), b: median(bs)};
+  }
+
+  function otsuThreshold(values, maxVal){
+    const bins = 256;
+    const hist = new Float64Array(bins);
+    for(let i=0;i<values.length;i++){
+      const b = Math.min(bins-1, Math.floor((values[i]/maxVal)*bins));
+      hist[b]++;
+    }
+    const total = values.length;
+    let sumAll=0; for(let i=0;i<bins;i++) sumAll += i*hist[i];
+    let sumB=0, wB=0, maxVar=0, thresholdBin=0;
+    for(let i=0;i<bins;i++){
+      wB += hist[i];
+      if(wB===0) continue;
+      const wF = total-wB;
+      if(wF===0) break;
+      sumB += i*hist[i];
+      const mB = sumB/wB, mF=(sumAll-sumB)/wF;
+      const varBetween = wB*wF*(mB-mF)*(mB-mF);
+      if(varBetween>maxVar){ maxVar=varBetween; thresholdBin=i; }
+    }
+    return (thresholdBin/bins)*maxVal;
+  }
+
+  // Flood-fill (BFS) connected-component labeling; returns only the largest
+  // component, since that's the gear (the rest is background noise, dust,
+  // or a second small object in frame).
+  function largestComponent(mask, cw, ch){
+    const N = cw*ch;
+    const visited = new Uint8Array(N);
+    const queue = new Int32Array(N);
+    let bestSize=0, bestSumX=0, bestSumY=0, bestMinX=0,bestMaxX=0,bestMinY=0,bestMaxY=0;
+    for(let start=0; start<N; start++){
+      if(!mask[start] || visited[start]) continue;
+      let qh=0, qt=0;
+      queue[qt++]=start; visited[start]=1;
+      let size=0, sumX=0, sumY=0;
+      let minX=cw, maxX=0, minY=ch, maxY=0;
+      while(qh<qt){
+        const p = queue[qh++];
+        const px = p % cw, py = (p / cw)|0;
+        size++; sumX+=px; sumY+=py;
+        if(px<minX)minX=px; if(px>maxX)maxX=px;
+        if(py<minY)minY=py; if(py>maxY)maxY=py;
+        // 4-connectivity
+        if(px>0){ const n=p-1; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n;} }
+        if(px<cw-1){ const n=p+1; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n;} }
+        if(py>0){ const n=p-cw; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n;} }
+        if(py<ch-1){ const n=p+cw; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n;} }
+      }
+      if(size>bestSize){ bestSize=size; bestSumX=sumX; bestSumY=sumY; bestMinX=minX;bestMaxX=maxX;bestMinY=minY;bestMaxY=maxY; }
+    }
+    if(bestSize===0) return null;
+    return {
+      size: bestSize,
+      cx: bestSumX/bestSize, cy: bestSumY/bestSize,
+      bbox: {minX:bestMinX,maxX:bestMaxX,minY:bestMinY,maxY:bestMaxY}
+    };
+  }
+
+  // Full pipeline: color-distance from the estimated background, Otsu
+  // threshold on that distance, then keep only the largest connected blob.
+  function detectGearBlob(imgData, cw, ch){
+    const data = imgData.data;
+    const bg = estimateBackgroundColor(data, cw, ch);
+    const N = cw*ch;
+    const dist = new Float32Array(N);
+    let maxDist = 0;
+    for(let i=0;i<N;i++){
+      const o = i*4;
+      const dr=data[o]-bg.r, dg=data[o+1]-bg.g, db=data[o+2]-bg.b;
+      const d = Math.sqrt(dr*dr+dg*dg+db*db);
+      dist[i]=d;
+      if(d>maxDist) maxDist=d;
+    }
+    if(maxDist < 5) return null; // background essentially uniform with everything — can't segment
+    const t = otsuThreshold(dist, maxDist);
+    const mask = new Uint8Array(N);
+    for(let i=0;i<N;i++) mask[i] = dist[i] > t ? 1 : 0;
+    const comp = largestComponent(mask, cw, ch);
+    if(!comp) return null;
+    const frac = comp.size / N;
+    if(frac < 0.03 || frac > 0.92) return null; // implausibly small/large — don't trust it
+    // rebuild a mask containing only the largest component, for the preview overlay
+    const compMask = new Uint8Array(N);
+    // re-run a light flood fill from the component's centroid-ish region isn't reliable;
+    // instead re-derive by relabeling using the same BFS but keep only matching size run.
+    // Simpler: redo BFS once more, this time recording the winning run into compMask.
+    const visited = new Uint8Array(N);
+    const queue = new Int32Array(N);
+    for(let start=0; start<N; start++){
+      if(!mask[start] || visited[start]) continue;
+      let qh=0, qt=0;
+      queue[qt++]=start; visited[start]=1;
+      const runStart = qt-1;
+      let size=0;
+      const members=[start];
+      while(qh<qt){
+        const p = queue[qh++];
+        const px = p % cw, py = (p/cw)|0;
+        size++;
+        if(px>0){ const n=p-1; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n; members.push(n);} }
+        if(px<cw-1){ const n=p+1; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n; members.push(n);} }
+        if(py>0){ const n=p-cw; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n; members.push(n);} }
+        if(py<ch-1){ const n=p+cw; if(mask[n]&&!visited[n]){visited[n]=1; queue[qt++]=n; members.push(n);} }
+      }
+      if(size===comp.size){
+        for(const m of members) compMask[m]=1;
+        break;
+      }
+    }
+    return {mask: compMask, cx: comp.cx, cy: comp.cy, bbox: comp.bbox, sizeFrac: frac};
+  }
+
+  function setupCanvas(){
+    const maxDim = 860;
+    let w = img.naturalWidth, h = img.naturalHeight;
+    const scale = Math.min(1, maxDim / Math.max(w,h));
+    cw = Math.round(w*scale); ch = Math.round(h*scale);
+
+    [baseCanvas, overlayCanvas].forEach(c=>{ c.width=cw; c.height=ch; });
+    bctx.drawImage(img, 0, 0, cw, ch);
+
+    // compute grayscale buffer
+    const imgData = bctx.getImageData(0,0,cw,ch);
+    grayData = new Float32Array(cw*ch);
+    for(let i=0;i<cw*ch;i++){
+      const r=imgData.data[i*4], g=imgData.data[i*4+1], b=imgData.data[i*4+2];
+      grayData[i] = 0.299*r + 0.587*g + 0.114*b;
+    }
+
+    els.canvasInner.style.aspectRatio = cw + ' / ' + ch;
+    els.placeholder.style.display='none';
+    els.canvasInner.style.display='block';
+    els.panelThresh.style.display='block';
+    els.panelCenter.style.display='block';
+    els.toolbarMsg.textContent = cw+' x '+ch+' px (解析用に縮小)';
+    setStep(2);
+    center = null;
+    segMask = null;
+    lastProfile = null;
+    els.panelResult.style.display='none';
+    els.panelInput.style.display='none';
+    els.resultsPanel.style.display='none';
+    els.detectBtn.disabled = true;
+
+    // Try automatic background removal + centroid to set the center without
+    // requiring a click. Falls back to manual click if segmentation can't
+    // find a plausible single blob (e.g. background not uniform enough).
+    const blob = detectGearBlob(imgData, cw, ch);
+    if(blob){
+      segMask = blob.mask;
+      center = {x: blob.cx, y: blob.cy};
+      els.centerHint.innerHTML = '中心を自動検出しました: ('+Math.round(blob.cx)+', '+Math.round(blob.cy)+')<br>ずれている場合はクリックして手動で変更できます。';
+      els.detectBtn.disabled = false;
+      setStep(3);
+    } else {
+      segMask = null;
+      els.centerHint.textContent = '背景と歯車の区別が付かず自動検出できませんでした。画像上で歯車のおおよその中心をクリックしてください。';
+    }
+
+    drawOverlay();
+    drawMaskPreview();
+  }
+
+  // ---------- threshold / mask ----------
+  function getThreshold(){ return parseInt(els.threshSlider.value,10); }
+  function getInvert(){ return els.invertCheck.checked; }
+
+  function isForeground(px, py){
+    if(px<0||py<0||px>=cw||py>=ch) return false;
+    const v = grayData[py*cw+px];
+    const t = getThreshold();
+    return getInvert() ? (v > t) : (v < t);
+  }
+
+  // Adaptive per-ray edge detection: for each ray, use that ray's own local
+  // min/max intensity range as the threshold, rather than one global value.
+  // This stays robust when lighting/shadow varies across the photo (a single
+  // global threshold can work in bright areas but miss the boundary in shadow).
+  function scanRay(theta, maxR, centerPt){
+    const dx = Math.cos(theta), dy = Math.sin(theta);
+    const samples = [];
+    for(let r=0;r<=maxR;r++){
+      const px = Math.round(centerPt.x + r*dx);
+      const py = Math.round(centerPt.y + r*dy);
+      if(px<0||py<0||px>=cw||py>=ch) break;
+      samples.push(grayData[py*cw+px]);
+    }
+    if(samples.length < 10) return {r:0, valid:false};
+    let localMin=Infinity, localMax=-Infinity;
+    for(let i=0;i<samples.length;i++){
+      if(samples[i]<localMin) localMin=samples[i];
+      if(samples[i]>localMax) localMax=samples[i];
+    }
+    if(localMax - localMin < 10) return {r:0, valid:false}; // too little contrast on this ray
+    const mid = (localMin+localMax)/2;
+    const invert = getInvert();
+    for(let r=samples.length-1;r>=0;r--){
+      const v = samples[r];
+      const isGear = invert ? (v > mid) : (v < mid);
+      if(isGear) return {r:r, valid:true};
+    }
+    return {r:0, valid:false};
+  }
+
+  // Fill rays where contrast was too low to judge (e.g. inside a shadow band)
+  // by interpolating between the nearest valid rays on either side (circular).
+  function interpolateInvalid(rRaw, valid){
+    const N = rRaw.length;
+    const out = new Float32Array(N);
+    for(let i=0;i<N;i++){
+      if(valid[i]){ out[i]=rRaw[i]; continue; }
+      let before=-1, after=-1;
+      for(let k=1;k<=N;k++){ const idx=(i-k+N)%N; if(valid[idx]){ before=idx; break; } }
+      for(let k=1;k<=N;k++){ const idx=(i+k)%N; if(valid[idx]){ after=idx; break; } }
+      if(before===-1 && after===-1){ out[i]=0; continue; }
+      if(before===-1){ out[i]=rRaw[after]; continue; }
+      if(after===-1){ out[i]=rRaw[before]; continue; }
+      const db=(i-before+N)%N, da=(after-i+N)%N, total=db+da;
+      out[i] = total===0 ? rRaw[before] : rRaw[before] + (rRaw[after]-rRaw[before])*(db/total);
+    }
+    return out;
+  }
+
+  // Fill invalid rays using the gear's own rotational periodicity: a shadowed
+  // gap of several teeth would get smoothed flat (and lose those teeth) by
+  // plain linear interpolation. Instead, borrow the value from a valid ray
+  // exactly N (or a few) tooth-pitches away, which still has the real tooth
+  // shape, so teeth inside the gap are reconstructed rather than erased.
+  function interpolateInvalidPeriodic(rRaw, valid, periodSamples){
+    const N = rRaw.length;
+    if(!periodSamples || periodSamples < 2) return interpolateInvalid(rRaw, valid);
+    const out = new Float32Array(N);
+    const maxK = Math.ceil(N/periodSamples) + 1;
+    for(let i=0;i<N;i++){
+      if(valid[i]){ out[i]=rRaw[i]; continue; }
+      let found = null;
+      for(let k=1;k<=maxK;k++){
+        const idxPlus = Math.round(i + k*periodSamples) % N;
+        const idxMinus = (((Math.round(i - k*periodSamples))%N)+N)%N;
+        const cands = [];
+        if(valid[idxPlus]) cands.push(rRaw[idxPlus]);
+        if(valid[idxMinus]) cands.push(rRaw[idxMinus]);
+        if(cands.length){ found = avg(cands); break; }
+      }
+      out[i] = found !== null ? found : null; // null = still unresolved, fall back later
+    }
+    // any samples periodicity couldn't resolve: fall back to plain interpolation
+    const stillInvalid = [];
+    for(let i=0;i<N;i++) stillInvalid[i] = out[i] === null;
+    if(stillInvalid.some(v=>v)){
+      const fallbackInput = new Float32Array(N);
+      for(let i=0;i<N;i++) fallbackInput[i] = stillInvalid[i] ? 0 : out[i];
+      const filled = interpolateInvalid(fallbackInput, stillInvalid.map(v=>!v));
+      for(let i=0;i<N;i++) if(stillInvalid[i]) out[i] = filled[i];
+    }
+    return out;
+  }
+
+  els.threshSlider.addEventListener('input', ()=>{
+    els.threshVal.textContent = els.threshSlider.value;
+    drawMaskPreview();
+  });
+  els.invertCheck.addEventListener('change', drawMaskPreview);
+  els.maskPreview.addEventListener('change', drawMaskPreview);
+  els.segPreview.addEventListener('change', drawMaskPreview);
+
+  function drawMaskPreview(){
+    if(!grayData) return;
+    drawOverlay(); // clears + redraws points/circles first
+    const showThresh = els.maskPreview.checked;
+    const showSeg = els.segPreview.checked && segMask;
+    if(!showThresh && !showSeg) return;
+    const t = getThreshold(), inv = getInvert();
+    const imgData = octx.getImageData(0,0,cw,ch);
+    for(let i=0;i<cw*ch;i++){
+      if(showSeg && segMask[i]){
+        imgData.data[i*4]   = 90;
+        imgData.data[i*4+1] = 220;
+        imgData.data[i*4+2] = 110;
+        imgData.data[i*4+3] = 65;
+        continue;
+      }
+      if(showThresh){
+        const v = grayData[i];
+        const fg = inv ? (v>t) : (v<t);
+        if(fg){
+          imgData.data[i*4]   = 79;
+          imgData.data[i*4+1] = 209;
+          imgData.data[i*4+2] = 197;
+          imgData.data[i*4+3] = 70;
+        }
+      }
+    }
+    octx.putImageData(imgData,0,0);
+    // redraw center/points on top (putImageData overwrote them)
+    drawPointsOnly();
+  }
+
+  // ---------- center picking ----------
+  overlayCanvas.addEventListener('click', function(e){
+    if(!img) return;
+    const rect = overlayCanvas.getBoundingClientRect();
+    const scaleX = cw/rect.width, scaleY = ch/rect.height;
+    const x = (e.clientX-rect.left)*scaleX;
+    const y = (e.clientY-rect.top)*scaleY;
+    center = {x,y};
+    els.centerHint.textContent = '中心設定済み(手動): ('+Math.round(x)+', '+Math.round(y)+') — 再クリックで変更可';
+    els.detectBtn.disabled = false;
+    lastProfile = null;
+    els.panelResult.style.display='none';
+    els.panelInput.style.display='none';
+    els.resultsPanel.style.display='none';
+    drawMaskPreview();
+    setStep(3);
+  });
+
+  function drawOverlay(){
+    octx.clearRect(0,0,cw,ch);
+    drawPointsOnly();
+  }
+
+  function drawPointsOnly(){
+    if(center){
+      octx.strokeStyle = '#4fd1c5';
+      octx.lineWidth = 2;
+      octx.beginPath();
+      octx.moveTo(center.x-9, center.y); octx.lineTo(center.x+9, center.y);
+      octx.moveTo(center.x, center.y-9); octx.lineTo(center.x, center.y+9);
+      octx.stroke();
+      octx.beginPath();
+      octx.arc(center.x, center.y, 3, 0, Math.PI*2);
+      octx.fillStyle = '#4fd1c5';
+      octx.fill();
+    }
+    if(lastProfile){
+      drawProfileOverlay(lastProfile);
+    }
+  }
+
+  function drawProfileOverlay(p){
+    const {angles, rProfile, peaks, valleys} = p;
+    // contour trace
+    octx.beginPath();
+    for(let i=0;i<angles.length;i++){
+      const x = center.x + rProfile[i]*Math.cos(angles[i]);
+      const y = center.y + rProfile[i]*Math.sin(angles[i]);
+      if(i===0) octx.moveTo(x,y); else octx.lineTo(x,y);
+    }
+    octx.closePath();
+    octx.strokeStyle = 'rgba(242,193,78,0.85)';
+    octx.lineWidth = 1.5;
+    octx.stroke();
+
+    peaks.forEach(idx=>{
+      const x = center.x + rProfile[idx]*Math.cos(angles[idx]);
+      const y = center.y + rProfile[idx]*Math.sin(angles[idx]);
+      octx.beginPath(); octx.arc(x,y,3.2,0,Math.PI*2);
+      octx.fillStyle = '#e0685f'; octx.fill();
+    });
+    valleys.forEach(idx=>{
+      const x = center.x + rProfile[idx]*Math.cos(angles[idx]);
+      const y = center.y + rProfile[idx]*Math.sin(angles[idx]);
+      octx.beginPath(); octx.arc(x,y,3.2,0,Math.PI*2);
+      octx.fillStyle = '#5aa9e6'; octx.fill();
+    });
+
+    // averaged circles
+    const rDaAvg = avg(peaks.map(i=>p.rProfile[i]));
+    const rDfAvg = avg(valleys.map(i=>p.rProfile[i]));
+    [ [rDaAvg,'rgba(224,104,95,0.55)'], [rDfAvg,'rgba(90,169,230,0.55)'] ].forEach(([r,color])=>{
+      octx.beginPath();
+      octx.setLineDash([4,4]);
+      octx.arc(center.x, center.y, r, 0, Math.PI*2);
+      octx.strokeStyle = color; octx.lineWidth = 1.2;
+      octx.stroke();
+      octx.setLineDash([]);
+    });
+  }
+
+  function avg(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
+
+  // ---------- radial scan + tooth detection ----------
+  els.detectBtn.addEventListener('click', function(){
+    if(!center) return;
+    els.detectBtn.disabled = true;
+    els.detectBtn.textContent = '解析中...';
+    setTimeout(()=>{
+      try{
+        runDetection();
+      }catch(err){
+        console.error(err);
+        els.detectHint.textContent = 'エラー: 中心位置やしきい値を見直してください。';
+      }
+      els.detectBtn.disabled = false;
+      els.detectBtn.textContent = '歯数を自動検出';
+    }, 30);
+  });
+
+  // Given an already-interpolated radial profile, smooth it and find the
+  // peak (tooth tip) / valley (tooth root) sample indices.
+  function smoothAndDetect(rProfile0, N){
+    const smoothed = new Float32Array(N);
+    const win = 5, half = 2;
+    for(let i=0;i<N;i++){
+      let s=0;
+      for(let k=-half;k<=half;k++) s += rProfile0[(i+k+N)%N];
+      smoothed[i] = s/win;
+    }
+
+    const rMin = Math.min(...smoothed);
+    const rMax = Math.max(...smoothed);
+    if(rMax - rMin < 3){
+      return {ok:false, msg:'輪郭を検出できませんでした。しきい値/反転設定、中心位置を調整してください。'};
+    }
+    const midLevel = rMin + (rMax-rMin)*0.5;
+    const above = new Array(N);
+    for(let i=0;i<N;i++) above[i] = smoothed[i] > midLevel;
+
+    let startIdx = -1;
+    for(let i=0;i<N;i++){
+      const prev = (i-1+N)%N;
+      if(above[prev] && !above[i]){ startIdx = i; break; }
+    }
+    if(startIdx === -1){
+      return {ok:false, msg:'歯の山谷を判別できませんでした。写真のコントラストやしきい値を確認してください。'};
+    }
+
+    const peaks = [];
+    const valleys = [];
+    let i = 0;
+    while(i < N){
+      const idx = (startIdx + i) % N;
+      if(above[idx]){
+        let maxR2 = -Infinity, maxIdx = idx;
+        while(i < N && above[(startIdx+i)%N]){
+          const ii = (startIdx+i)%N;
+          if(smoothed[ii] > maxR2){ maxR2 = smoothed[ii]; maxIdx = ii; }
+          i++;
+        }
+        peaks.push(maxIdx);
+      } else {
+        let minR2 = Infinity, minIdx = idx;
+        while(i < N && !above[(startIdx+i)%N]){
+          const ii = (startIdx+i)%N;
+          if(smoothed[ii] < minR2){ minR2 = smoothed[ii]; minIdx = ii; }
+          i++;
+        }
+        valleys.push(minIdx);
+      }
+    }
+    return {ok:true, rProfile: smoothed, peaks, valleys, midLevel, rMin, rMax};
+  }
+
+  // Robust peak/valley picking: a single global mid-level threshold can fail
+  // when one tooth's root happens to be only slightly shallower than others
+  // (uneven lighting, slight wear, a hair of decentering) — the dip stays on
+  // the "above" side of the global threshold and two teeth get merged into
+  // one. Instead, find every local max/min and greedily keep the tallest,
+  // rejecting other candidates within one tooth-pitch of an already-kept one
+  // (non-maximum suppression). This only compares each candidate to its
+  // immediate neighbours plus a distance rule, so a shallow-but-real dip is
+  // no longer disqualified by the global amplitude range.
+  function findExtremaNMS(profile, minDistance, findMax){
+    const N = profile.length;
+    const cands = [];
+    for(let i=0;i<N;i++){
+      const prev = profile[(i-1+N)%N], next = profile[(i+1)%N];
+      if(findMax){
+        if(profile[i] >= prev && profile[i] >= next && (profile[i]>prev || profile[i]>next)) cands.push(i);
+      } else {
+        if(profile[i] <= prev && profile[i] <= next && (profile[i]<prev || profile[i]<next)) cands.push(i);
+      }
+    }
+    cands.sort((a,b)=> findMax ? profile[b]-profile[a] : profile[a]-profile[b]);
+    const picked = [];
+    for(const c of cands){
+      let ok = true;
+      for(const p of picked){
+        const d = Math.min(Math.abs(c-p), N-Math.abs(c-p));
+        if(d < minDistance){ ok = false; break; }
+      }
+      if(ok) picked.push(c);
+    }
+    picked.sort((a,b)=>a-b);
+    return picked;
+  }
+
+  // One full scan+peak/valley-detect pass around a given center point.
+  // Two-stage: a rough pass (plain interpolation across low-contrast gaps)
+  // gives an approximate tooth pitch, then a second pass re-fills those same
+  // gaps using that pitch (borrowing the shape from elsewhere on the gear)
+  // so teeth inside a shadowed/low-contrast arc aren't smoothed away.
+  function scanAndDetect(centerPt){
+    const N = 1440; // 0.25 deg resolution — finer teeth need finer sampling
+    const maxR = Math.min(centerPt.x, centerPt.y, cw-centerPt.x, ch-centerPt.y) - 2;
+    const angles = new Array(N);
+    const rRaw = new Float32Array(N);
+    const validRay = new Array(N);
+
+    for(let i=0;i<N;i++){
+      const theta = (i/N)*Math.PI*2;
+      angles[i] = theta;
+      const res = scanRay(theta, maxR, centerPt);
+      rRaw[i] = res.r;
+      validRay[i] = res.valid;
+    }
+
+    if(validRay.every(v=>!v)){
+      return {ok:false, msg:'輪郭を検出できませんでした。反転設定や中心位置を調整してください。'};
+    }
+
+    // Stage 1: rough profile via plain interpolation, just to estimate pitch.
+    const roughProfile = interpolateInvalid(rRaw, validRay);
+    const roughResult = smoothAndDetect(roughProfile, N);
+    if(!roughResult.ok) return roughResult;
+
+    // Stage 2: if there are gaps wide enough to matter, re-fill them using
+    // the estimated tooth pitch instead of a flat straight-line interpolation.
+    const invalidCount = validRay.filter(v=>!v).length;
+    let finalResult = roughResult;
+    let angles_ = angles;
+    if(invalidCount > 0 && roughResult.peaks.length >= 4){
+      const periodSamples = N / roughResult.peaks.length;
+      const periodicProfile = interpolateInvalidPeriodic(rRaw, validRay, periodSamples);
+      const periodicResult = smoothAndDetect(periodicProfile, N);
+      if(periodicResult.ok) finalResult = periodicResult;
+    }
+
+    // Stage 3: refine peaks/valleys with NMS using the pitch estimated above
+    // — this is what actually recovers a tooth lost to a shallow, borderline
+    // root instead of the global-threshold run detection used so far.
+    const pitchEstimate = N / finalResult.peaks.length;
+    const minDist = pitchEstimate * 0.55;
+    const nmsPeaks = findExtremaNMS(finalResult.rProfile, minDist, true);
+    const nmsValleys = findExtremaNMS(finalResult.rProfile, minDist, false);
+    if(nmsPeaks.length >= 3) finalResult = {...finalResult, peaks: nmsPeaks, valleys: nmsValleys};
+
+    return {ok:true, angles: angles_, rProfile: finalResult.rProfile,
+      peaks: finalResult.peaks, valleys: finalResult.valleys,
+      midLevel: finalResult.midLevel, rMin: finalResult.rMin, rMax: finalResult.rMax,
+      gapSamples: invalidCount};
+  }
+
+  // Estimate tooth count independently via autocorrelation: a gear silhouette
+  // has z-fold rotational symmetry, so the radial profile shifted by one tooth
+  // pitch (360/z) should closely match itself. This is robust to a handful of
+  // local mis-detections (shadow bands, dirt, etc.) since it scores the whole
+  // profile's periodicity rather than counting individual threshold crossings.
+  function autocorrelationZEstimate(rProfile){
+    const N = rProfile.length;
+    const mean = rProfile.reduce((a,b)=>a+b,0)/N;
+    const centered = new Float32Array(N);
+    for(let i=0;i<N;i++) centered[i] = rProfile[i]-mean;
+    let denom = 0;
+    for(let i=0;i<N;i++) denom += centered[i]*centered[i];
+    if(denom === 0) return null;
+
+    let bestZ=null, bestScore=-Infinity;
+    const maxZ = Math.min(200, Math.floor(N/4));
+    for(let z=4; z<=maxZ; z++){
+      const shift = Math.round(N/z);
+      let num=0;
+      for(let i=0;i<N;i++) num += centered[i]*centered[(i+shift)%N];
+      const score = num/denom;
+      if(score>bestScore){ bestScore=score; bestZ=z; }
+    }
+    return {z:bestZ, score:bestScore};
+  }
+
+  function runDetection(){
+    // Scan around the user-clicked center. (An earlier version tried to
+    // auto-refine the center from the detected tooth centroid, but when the
+    // first pass already had a bad region that biased the centroid and made
+    // things worse — reverted. The clicked center is used as-is.)
+    const result = scanAndDetect(center);
+    if(!result.ok){ els.detectHint.textContent = result.msg; return; }
+
+    const {angles, rProfile: smoothed, peaks, valleys, midLevel, rMin, rMax, gapSamples} = result;
+
+    const autocorr = autocorrelationZEstimate(smoothed);
+
+    lastProfile = {angles, rProfile: smoothed, peaks, valleys, midLevel, rMin, rMax, autocorr};
+    zOverrideDelta = 0;
+
+    drawMaskPreview();
+    drawProfileChart(lastProfile);
+
+    els.panelResult.style.display = 'block';
+    els.panelInput.style.display = 'block';
+    updateZDisplay();
+    els.calcBtn.disabled = false;
+    setStep(4);
+
+    const rDaAvg = avg(peaks.map(idx=>smoothed[idx]));
+    const rDfAvg = avg(valleys.map(idx=>smoothed[idx]));
+    let hint = '歯先半径(px)平均: '+rDaAvg.toFixed(1)+' &nbsp;/&nbsp; 歯底半径(px)平均: '+rDfAvg.toFixed(1)+
+      '<br>輪郭カウント: '+peaks.length+'枚(ピーク='+peaks.length+' バレー='+valleys.length+')';
+    if(gapSamples > 0){
+      hint += '<br><span style="color:var(--text-faint);">コントラスト不足で判定できなかった範囲('+gapSamples+'サンプル、全体の'+((gapSamples/angles.length)*100).toFixed(0)+'%)は、歯のピッチを使って周辺の形状から復元しています。</span>';
+    }
+    if(autocorr && autocorr.z){
+      const agree = Math.abs(autocorr.z - peaks.length) <= 1;
+      hint += ' &nbsp;/&nbsp; 周期解析(自己相関)による推定: '+autocorr.z+'枚 (一致度'+(autocorr.score*100).toFixed(0)+'%)';
+      hint += agree
+        ? ' <span style="color:var(--ok);">— 両手法が一致</span>'
+        : ' <span style="color:var(--warn);">— 両手法が不一致。実物を目視で数え、下の数値欄で補正してください</span>';
+    }
+    hint += '<br>輪郭線(黄)が歯形に沿っていない場合はしきい値・反転設定を調整し再検出してください。';
+    els.detectHint.innerHTML = hint;
+  }
+
+  function getCurrentZ(){
+    if(!lastProfile) return null;
+    return lastProfile.peaks.length + zOverrideDelta;
+  }
+
+  // Involute function inv(alpha) = tan(alpha) - alpha (alpha in radians) —
+  // shared by the span-teeth-count and span-length calculations below.
+  function involute(alphaRad){ return Math.tan(alphaRad) - alphaRad; }
+
+  // Recommended number of teeth to span (またぎ歯数) for a base-tangent-length
+  // (またぎ歯厚) measurement — a standard formula depending only on z and the
+  // pressure angle, not on anything measured from the photo.
+  function recommendedSpanTeeth(z, alphaDeg){
+    return Math.max(1, Math.round(z*(alphaDeg/180) + 0.5));
+  }
+
+  function updateSpanK(){
+    const z = getCurrentZ();
+    const alphaDeg = parseFloat(els.alphaInput.value) || 20;
+    if(!z){ els.spanK.textContent = '--'; return; }
+    els.spanK.textContent = recommendedSpanTeeth(z, alphaDeg);
+  }
+  els.alphaInput.addEventListener('input', updateSpanK);
+
+  function updateZDisplay(){
+    if(!lastProfile) return;
+    const z = getCurrentZ();
+    els.zVal.value = z;
+    updateDaFieldMode(z);
+    updateSpanK();
+  }
+  els.zMinus.addEventListener('click', ()=>{ if(lastProfile){ zOverrideDelta--; updateZDisplay(); }});
+  els.zPlus.addEventListener('click', ()=>{ if(lastProfile){ zOverrideDelta++; updateZDisplay(); }});
+  els.zVal.addEventListener('input', ()=>{
+    if(!lastProfile) return;
+    const v = parseInt(els.zVal.value,10);
+    if(!isNaN(v) && v>=3){
+      zOverrideDelta = v - lastProfile.peaks.length;
+      updateDaFieldMode(v);
+    }
+  });
+
+  function updateDaFieldMode(z){
+    const isOdd = (z % 2) !== 0;
+    els.daFieldsOdd.style.display = isOdd ? 'block' : 'none';
+    els.daFieldsEven.style.display = isOdd ? 'none' : 'block';
+    if(isOdd) updateOddCalc();
+  }
+
+  // Odd tooth count: a micrometer contacts one tip on one side and the two
+  // teeth adjacent to the ideal opposite position on the other side (they're
+  // each offset by half a tooth pitch, so both touch at the same height).
+  // Measured gap M = R*(1+cos(pi/z))  =>  Da = 2M / (1+cos(pi/z)).
+  function oddConversionFactor(z){
+    return 1 + Math.cos(Math.PI/z);
+  }
+
+  function updateOddCalc(){
+    const z = getCurrentZ();
+    const M = parseFloat(els.daOddM.value);
+    if(!z || isNaN(M)){
+      els.daOddCalc.textContent = '--';
+      return;
+    }
+    const Da = 2*M / oddConversionFactor(z);
+    els.daOddCalc.textContent = Da.toFixed(3);
+  }
+  els.daOddM.addEventListener('input', updateOddCalc);
+
+  function getDaValue(){
+    const z = getCurrentZ();
+    const isOdd = (z % 2) !== 0;
+    if(isOdd){
+      const M = parseFloat(els.daOddM.value);
+      if(isNaN(M)) return null;
+      return 2*M / oddConversionFactor(z);
+    } else {
+      const v = parseFloat(els.daInput.value);
+      return isNaN(v) ? null : v;
+    }
+  }
+
+  // ---------- profile chart ----------
+  function drawProfileChart(p){
+    const canvas = els.profileChart;
+    const dpr = window.devicePixelRatio || 1;
+    const rect = canvas.getBoundingClientRect();
+    const w = rect.width || canvas.parentElement.clientWidth;
+    const h = 120;
+    canvas.width = w*dpr; canvas.height = h*dpr;
+    canvas.style.height = h+'px';
+    const ctx = canvas.getContext('2d');
+    ctx.scale(dpr,dpr);
+    ctx.clearRect(0,0,w,h);
+
+    const {angles, rProfile, peaks, valleys, midLevel, rMin, rMax} = p;
+    const pad = 6;
+    const range = (rMax-rMin) || 1;
+    function xOf(i){ return pad + (i/(angles.length-1))*(w-2*pad); }
+    function yOf(r){ return h-pad - ((r-rMin)/range)*(h-2*pad); }
+
+    // midline
+    ctx.strokeStyle = 'rgba(255,255,255,0.15)';
+    ctx.setLineDash([3,3]);
+    ctx.beginPath(); ctx.moveTo(0, yOf(midLevel)); ctx.lineTo(w, yOf(midLevel)); ctx.stroke();
+    ctx.setLineDash([]);
+
+    // profile line
+    ctx.beginPath();
+    for(let i=0;i<rProfile.length;i++){
+      const x = xOf(i), y = yOf(rProfile[i]);
+      if(i===0) ctx.moveTo(x,y); else ctx.lineTo(x,y);
+    }
+    ctx.strokeStyle = '#f2c14e';
+    ctx.lineWidth = 1.3;
+    ctx.stroke();
+
+    peaks.forEach(idx=>{
+      ctx.beginPath(); ctx.arc(xOf(idx), yOf(rProfile[idx]), 2.4, 0, Math.PI*2);
+      ctx.fillStyle = '#e0685f'; ctx.fill();
+    });
+    valleys.forEach(idx=>{
+      ctx.beginPath(); ctx.arc(xOf(idx), yOf(rProfile[idx]), 2.4, 0, Math.PI*2);
+      ctx.fillStyle = '#5aa9e6'; ctx.fill();
+    });
+  }
+
+  // ---------- calculation ----------
+  els.calcBtn.addEventListener('click', function(){
+    if(!lastProfile) return;
+    const Da = getDaValue();
+    const alphaDeg = parseFloat(els.alphaInput.value) || 20;
+    if(!Da || Da<=0){
+      alert('外径Da(mm)を正しく入力してください(奇数歯の場合は3点測定値Mを入力してください)。');
+      return;
+    }
+    const z = getCurrentZ();
+    if(z < 3){
+      alert('検出歯数が少なすぎます。中心位置やしきい値を見直してください。');
+      return;
+    }
+
+    const rDaPx = avg(lastProfile.peaks.map(idx=>lastProfile.rProfile[idx]));
+    const rDfPx = avg(lastProfile.valleys.map(idx=>lastProfile.rProfile[idx]));
+
+    const pxPerMm = rDaPx / (Da/2);
+    const DfMeasured = 2 * rDfPx / pxPerMm;
+
+    const m = Da / (z+2); // naive estimate assuming no profile shift (x=0)
+    const d = m*z;
+    const alphaRad = alphaDeg*Math.PI/180;
+    const Db = d*Math.cos(alphaRad);
+    const DfTheoretical = Da - 4.5*m;
+
+    // nearest JIS module assuming x=0 (reference point only, not "the answer")
+    let nearest = JIS_MODULES[0], bestDiff = Infinity;
+    JIS_MODULES.forEach(jm=>{
+      const diff = Math.abs(jm-m);
+      if(diff<bestDiff){bestDiff=diff; nearest=jm;}
+    });
+    const moduleDeviationPct = ((m-nearest)/nearest)*100;
+
+    // Da = m*(z+2+2x) has two unknowns (m,x) from one photo — underdetermined.
+    // Instead of asserting one m, list which JIS-standard modules are consistent
+    // with the measured Da/z, and what profile shift x each would imply.
+    const candidates = [];
+    JIS_MODULES.forEach(jm=>{
+      const x = (Da - jm*(z+2)) / (2*jm);
+      if(Math.abs(x) <= 1.2){
+        candidates.push({m: jm, x: x});
+      }
+    });
+    candidates.sort((a,b)=>Math.abs(a.x)-Math.abs(b.x));
+    const candidatesTop = candidates.slice(0,5);
+
+    const dfDiffPct = ((DfMeasured-DfTheoretical)/DfTheoretical)*100;
+
+    // If a span (またぎ歯厚) measurement W was also entered, we now have two
+    // independent equations — Da=m(z+2+2x) and W=m·cosα·[π(k-0.5)+z·invα+2x·tanα]
+    // — for the two unknowns m and x, so they can be solved directly instead
+    // of only listed as candidates.
+    const k = recommendedSpanTeeth(z, alphaDeg);
+    let spanResult = null;
+    const W = parseFloat(els.spanWInput.value);
+    if(!isNaN(W) && W > 0){
+      const invA = involute(alphaRad);
+      const cosA = Math.cos(alphaRad), sinA = Math.sin(alphaRad), tanA = Math.tan(alphaRad);
+      const bracket = Math.PI*(k-0.5) + z*invA - tanA*(z+2);
+      const denom = cosA*bracket;
+      if(Math.abs(denom) > 1e-9){
+        const mSolved = (W - sinA*Da) / denom;
+        if(mSolved > 0){
+          const xSolved = Da/(2*mSolved) - (z+2)/2;
+          let nearestSolved = JIS_MODULES[0], bestDiffSolved = Infinity;
+          JIS_MODULES.forEach(jm=>{
+            const diff = Math.abs(jm-mSolved);
+            if(diff<bestDiffSolved){bestDiffSolved=diff; nearestSolved=jm;}
+          });
+          spanResult = {k, W, m: mSolved, x: xSolved, nearest: nearestSolved};
+        }
+      }
+    }
+
+    renderResults({
+      z, Da, m, d, Db, DfMeasured, DfTheoretical, dfDiffPct,
+      nearest, moduleDeviationPct, alphaDeg, pxPerMm, isOdd: (z%2)!==0,
+      candidatesTop, k, spanResult
+    });
+  });
+
+  function fmt(v, digits){ return (Math.round(v*Math.pow(10,digits))/Math.pow(10,digits)).toFixed(digits); }
+
+  function renderResults(r){
+    els.resultsPanel.style.display = 'block';
+    setStep(6);
+
+    const rows = [];
+    rows.push(['section','実測値']);
+    rows.push(['歯数 z (画像検出/手動補正)', fmt(r.z,0), '<span class="badge ok">要目視確認</span>']);
+    rows.push(['外径 Da (実測入力'+(r.isOdd?'・3点測定値Mから換算':'')+')', fmt(r.Da,3)+' mm', '<span class="badge ok">実測</span>']);
+
+    rows.push(['section','モジュール推定 (x=0を仮定した単純値・要注意)']);
+    rows.push(['モジュール m0 = Da/(z+2)', fmt(r.m,4)+' mm', '<span class="badge warn">転位0mm仮定</span>']);
+    rows.push(['最近接JIS標準モジュール(x=0仮定)', fmt(r.nearest,2)+' mm', moduleBadge(r.moduleDeviationPct)]);
+    rows.push(['　└ m0からの乖離', fmt(r.moduleDeviationPct,2)+' %', '']);
+    rows.push(['ピッチ円直径 d = m0&times;z (参考)', fmt(r.d,3)+' mm', '<span class="badge warn">m0に依存</span>']);
+
+    rows.push(['section','参考値 (検算用)']);
+    rows.push(['圧力角 &alpha; (仮定/入力)', fmt(r.alphaDeg,1)+' &deg;', '<span class="badge warn">画像からは実測不可</span>']);
+    rows.push(['基礎円直径 Db = d&times;cos&alpha;', fmt(r.Db,3)+' mm', '<span class="badge warn">&alpha;, m0仮定に依存</span>']);
+    rows.push(['歯底円 Df (画像実測・目安)', fmt(r.DfMeasured,3)+' mm', '<span class="badge warn">画像検出</span>']);
+    rows.push(['歯底円 Df (標準歯車と仮定した理論値)', fmt(r.DfTheoretical,3)+' mm', '<span class="badge warn">転位0mm仮定</span>']);
+    rows.push(['　└ 実測と理論値の差', fmt(r.dfDiffPct,2)+' %', diffBadge(r.dfDiffPct)]);
+    rows.push(['px/mm 換算係数', fmt(r.pxPerMm,3), '']);
+
+    els.resultsBody.innerHTML = rows.map(row=>{
+      if(row[0]==='section'){
+        return '<tr class="section"><td colspan="3">'+row[1]+'</td></tr>';
+      }
+      return '<tr><td>'+row[0]+'</td><td class="val">'+row[1]+'</td><td class="tag">'+row[2]+'</td></tr>';
+    }).join('');
+
+    // candidate module / profile-shift table — Da = m(z+2+2x) has 2 unknowns
+    // (m, x) from a single photo, so we cannot solve for a single "correct"
+    // module. Instead show which standard modules are consistent with the
+    // measured Da/z and what x each implies, for engineering judgement.
+    if(r.candidatesTop && r.candidatesTop.length){
+      const candRows = r.candidatesTop.map(c=>{
+        const badge = Math.abs(c.x)<0.6 ? '<span class="badge ok">妥当な範囲</span>'
+                    : Math.abs(c.x)<1.0 ? '<span class="badge warn">やや大きい</span>'
+                    : '<span class="badge danger">現実的でない</span>';
+        return '<tr><td>m = '+fmt(c.m,2)+' mm</td><td class="val">x &asymp; '+(c.x>=0?'+':'')+fmt(c.x,3)+'</td><td class="tag">'+badge+'</td></tr>';
+      }).join('');
+      els.resultsBody.innerHTML += '<tr class="section"><td colspan="3">Da・zと整合するJIS標準モジュール候補(m, xは連立不可のため候補列挙)</td></tr>' + candRows;
+    }
+
+    // またぎ歯厚(span) measurement, if entered, gives a second independent
+    // equation — so m and x here are solved directly, not listed as guesses.
+    let spanRowsHtml = '<tr class="section"><td colspan="3">またぎ歯厚(推奨またぎ歯数 k = '+r.k+'枚)</td></tr>';
+    if(r.spanResult){
+      const sr = r.spanResult;
+      const devPct = ((sr.m - sr.nearest)/sr.nearest)*100;
+      spanRowsHtml += '<tr><td>またぎ歯厚 実測値 W</td><td class="val">'+fmt(sr.W,3)+' mm</td><td class="tag"><span class="badge ok">実測</span></td></tr>';
+      spanRowsHtml += '<tr><td>連立解 モジュール m</td><td class="val">'+fmt(sr.m,4)+' mm</td><td class="tag"><span class="badge ok">Da・W連立</span></td></tr>';
+      spanRowsHtml += '<tr><td>連立解 転位係数 x</td><td class="val">'+(sr.x>=0?'+':'')+fmt(sr.x,4)+'</td><td class="tag"><span class="badge ok">Da・W連立</span></td></tr>';
+      spanRowsHtml += '<tr><td>最近接JIS標準モジュール</td><td class="val">'+fmt(sr.nearest,2)+' mm</td><td class="tag">'+moduleBadge(devPct)+'</td></tr>';
+    } else {
+      spanRowsHtml += '<tr><td colspan="3" style="color:var(--text-faint);">またぎ歯厚マイクロメータ等でW(またぎ歯厚)を実測し、左パネルの入力欄に入れると、候補からの推測ではなくm・xを直接算出します。</td></tr>';
+    }
+    els.resultsBody.innerHTML += spanRowsHtml;
+
+
+    // flag box — kept as a soft cross-check hint, not a diagnosis of profile shift.
+    // Da/z/m are the reliable outputs; Df is only a rough sanity check on those.
+    const absDiff = Math.abs(r.dfDiffPct);
+    let flagHtml = '';
+    if(absDiff < 3){
+      flagHtml = '<div class="flagbox ok"><b>検算:</b> 歯底円の画像実測値は理論値(転位0mm仮定)とほぼ一致しています。歯数・中心位置は概ね妥当と考えられます。実際に転位があっても、この程度の乖離では画像からは判別できません。</div>';
+    } else if(absDiff < 8){
+      flagHtml = '<div class="flagbox warn"><b>検算:</b> 歯底円の実測値と理論値に '+fmt(absDiff,1)+'% の乖離があります。転位歯車である可能性のほか、歯数カウントのズレや輪郭検出の誤差でも同程度の乖離は起こり得ます。歯数を目視で再確認してください(歯底円の値は画像検出によるものなので、これだけで断定はできません)。</div>';
+    } else {
+      flagHtml = '<div class="flagbox danger"><b>検算:</b> 乖離が '+fmt(absDiff,1)+'% と大きく出ています。転位歯車の可能性に加えて、歯数の誤検出・中心位置のズレの可能性も考えられます。輪郭オーバーレイ(黄線)が歯形に正しく沿っているか、歯数が実物と合っているか確認してください。</div>';
+    }
+    if(Math.abs(r.moduleDeviationPct) > 3){
+      flagHtml += '<div class="flagbox warn" style="margin-top:8px;"><b>補足:</b> m0がJIS標準モジュール('+fmt(r.nearest,2)+')から '+fmt(Math.abs(r.moduleDeviationPct),1)+'% 外れています。歯数カウントが±1ずれている可能性があります。左パネルの歯数欄で補正し、標準値に近づくか確認してください。</div>';
+    }
+    flagHtml += '<div class="flagbox warn" style="margin-top:8px;"><b>モジュールについて:</b> Da = m&times;(z+2+2x) という関係上、写真1枚(Da・zのみ)からはモジュールmと転位係数xを同時には特定できません(未知数2つに対して式が1つ)。'+
+      '上のm0はx=0(転位なし)と仮定した参考値です。実際には転位歯車の方が多いとのことですので、下の候補表でJIS標準モジュールごとに整合するxを確認し、選定・カタログ等の知見と合わせて最も妥当なモジュールを判断してください。'+
+      '正確なモジュール・転位量が必要な場合は、またぎ歯厚測定(オーバーピン法)や現物のCMM測定を推奨します。</div>';
+    els.flagArea.innerHTML = flagHtml;
+
+    els.resultsPanel.scrollIntoView({behavior:'smooth', block:'nearest'});
+  }
+
+  function moduleBadge(devPct){
+    const a = Math.abs(devPct);
+    if(a<1) return '<span class="badge ok">標準値と一致</span>';
+    if(a<3) return '<span class="badge warn">やや乖離</span>';
+    return '<span class="badge danger">要確認</span>';
+  }
+  function diffBadge(diffPct){
+    const a = Math.abs(diffPct);
+    if(a<3) return '<span class="badge ok">一致</span>';
+    if(a<8) return '<span class="badge warn">要確認</span>';
+    return '<span class="badge danger">乖離大</span>';
+  }
+
+})();
+</script>
+</body>
+</html>
